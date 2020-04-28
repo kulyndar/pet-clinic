@@ -1,3 +1,13 @@
+# SWA - description of  HW1
+1. Configuration Projects use Spring Cloud Configuration. Each service has a configuration in service/src/java/resources/bootstrap.yml. There is URI, from which is configuration obtained (in our case configuration server on localhost:8888).  Configuration server getting configuration from the [git repository](https://github.com/spring-petclinic/spring-petclinic-microservices-config). We can change the target repository or create configuration locally in a file.
+2. 
+    -  Starting order is defined with ```depends_on``` in docker-compose
+    - Waiting for other service to start - util ```dockerize -wait```
+  
+3. Connection do DB is in application.yml. DB services are dockerized on docker-compose
+4. Logs are in Kibana, collected with FluentD. Metrics are cisualized in Grafana, collected with Prometheus
+5. Dockerfile is optimized by changing order of lines. ARG ```ARTIFACT_NAME``` was changing from one service to another.
+Because of it docker wasn`t able to use cache. Also ADD was changed to RUN wget, because it uses cache better.
 # Distributed version of the Spring PetClinic Sample Application built with Spring Cloud 
 
 [![Build Status](https://travis-ci.org/spring-petclinic/spring-petclinic-microservices.svg?branch=master)](https://travis-ci.org/spring-petclinic/spring-petclinic-microservices/) [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)

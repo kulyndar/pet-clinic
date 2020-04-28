@@ -1,5 +1,14 @@
 version: '2'
 
+volumes:
+  visit-service-volume:
+    driver: local
+  vets-service-volume:
+    driver: local
+  customers-service-volume:
+    driver: local
+  elasticsearch_data:
+
 services:
   config-server:
     image: springcommunity/spring-petclinic-config-server
@@ -14,7 +23,7 @@ services:
     mem_limit: 512M
     depends_on:
       - config-server
-    entrypoint: ["./dockerize","-wait=tcp://config-server:8888","-timeout=60s","--","java", "-XX:+UnlockExperimentalVMOptions", "-XX:+UseCGroupMemoryLimitForHeap", "-Djava.security.egd=file:/dev/./urandom","-jar","/app.jar"]
+    entrypoint: ["./dockerize","-wait=tcp://config-server:8888","-timeout=120s","--","java", "-XX:+UnlockExperimentalVMOptions", "-XX:+UseCGroupMemoryLimitForHeap", "-Djava.security.egd=file:/dev/./urandom","-jar","/app.jar"]
     ports:
      - 8761:8761
 
@@ -23,33 +32,51 @@ services:
     container_name: customers-service
     mem_limit: 512M
     depends_on:
-     - config-server
-     - discovery-server
-    entrypoint: ["./dockerize","-wait=tcp://discovery-server:8761","-timeout=60s","--","java", "-XX:+UnlockExperimentalVMOptions", "-XX:+UseCGroupMemoryLimitForHeap", "-Djava.security.egd=file:/dev/./urandom","-jar","/app.jar"]
+      - config-server
+      - discovery-server
+    entrypoint: ["./dockerize","-wait=tcp://discovery-server:8761","-wait=tcp://db-customers-service:3306","-timeout=120s","--","java", "-XX:+UnlockExperimentalVMOptions", "-XX:+UseCGroupMemoryLimitForHeap", "-Djava.security.egd=file:/dev/./urandom","-jar","/app.jar"]
     ports:
-    - 8081:8081
+      - 8081:8081
+    links:
+      - fluentd
+    logging:
+      driver: fluentd
+      options:
+        fluentd-address: localhost:24224
 
   visits-service:
     image: springcommunity/spring-petclinic-visits-service
     container_name: visits-service
     mem_limit: 512M
     depends_on:
-     - config-server
-     - discovery-server
-    entrypoint: ["./dockerize","-wait=tcp://discovery-server:8761","-timeout=60s","--","java", "-XX:+UnlockExperimentalVMOptions", "-XX:+UseCGroupMemoryLimitForHeap", "-Djava.security.egd=file:/dev/./urandom","-jar","/app.jar"]
+      - config-server
+      - discovery-server
+    entrypoint: ["./dockerize","-wait=tcp://discovery-server:8761","-wait=tcp://db-visit-service:3306","-timeout=120s","--","java", "-XX:+UnlockExperimentalVMOptions", "-XX:+UseCGroupMemoryLimitForHeap", "-Djava.security.egd=file:/dev/./urandom","-jar","/app.jar"]
     ports:
-     - 8082:8082
+      - 8082:8082
+    links:
+      - fluentd
+    logging:
+      driver: fluentd
+      options:
+        fluentd-address: localhost:24224
 
   vets-service:
     image: springcommunity/spring-petclinic-vets-service
     container_name: vets-service
     mem_limit: 512M
     depends_on:
-     - config-server
-     - discovery-server
-    entrypoint: ["./dockerize","-wait=tcp://discovery-server:8761","-timeout=60s","--","java", "-XX:+UnlockExperimentalVMOptions", "-XX:+UseCGroupMemoryLimitForHeap", "-Djava.security.egd=file:/dev/./urandom","-jar","/app.jar"]
+      - config-server
+      - discovery-server
+    entrypoint: ["./dockerize","-wait=tcp://discovery-server:8761","-wait=tcp://db-vets-service:3306", "-timeout=120s","--","java", "-XX:+UnlockExperimentalVMOptions", "-XX:+UseCGroupMemoryLimitForHeap", "-Djava.security.egd=file:/dev/./urandom","-jar","/app.jar"]
     ports:
-     - 8083:8083
+      - 8083:8083
+    links:
+      - fluentd
+    logging:
+      driver: fluentd
+      options:
+        fluentd-address: localhost:24224
 
   api-gateway:
     image: springcommunity/spring-petclinic-api-gateway
@@ -58,7 +85,7 @@ services:
     depends_on:
      - config-server
      - discovery-server
-    entrypoint: ["./dockerize","-wait=tcp://discovery-server:8761","-timeout=60s","--","java", "-XX:+UnlockExperimentalVMOptions", "-XX:+UseCGroupMemoryLimitForHeap", "-Djava.security.egd=file:/dev/./urandom","-jar","/app.jar"]
+    entrypoint: ["./dockerize","-wait=tcp://discovery-server:8761","-timeout=120s","--","java", "-XX:+UnlockExperimentalVMOptions", "-XX:+UseCGroupMemoryLimitForHeap", "-Djava.security.egd=file:/dev/./urandom","-jar","/app.jar"]
     ports:
      - 8080:8080
 
@@ -78,7 +105,7 @@ services:
     depends_on:
      - config-server
      - discovery-server
-    entrypoint: ["./dockerize","-wait=tcp://discovery-server:8761","-timeout=60s","--","java", "-XX:+UnlockExperimentalVMOptions", "-XX:+UseCGroupMemoryLimitForHeap", "-Djava.security.egd=file:/dev/./urandom","-jar","/app.jar"]
+    entrypoint: ["./dockerize","-wait=tcp://discovery-server:8761","-timeout=120s","--","java", "-XX:+UnlockExperimentalVMOptions", "-XX:+UseCGroupMemoryLimitForHeap", "-Djava.security.egd=file:/dev/./urandom","-jar","/app.jar"]
     ports:
      - 9090:9090
 
@@ -97,3 +124,80 @@ services:
     mem_limit: 256M
     ports:
     - 9091:9090
+
+  ## DB
+  db-visit-service:
+    image: mysql:latest
+    restart: on-failure
+    container_name: db-visit-service
+    environment:
+      MYSQL_DATABASE: 'visit_service'
+      MYSQL_USER: 'user'
+      MYSQL_PASSWORD: 'password'
+      MYSQL_ROOT_PASSWORD: 'password'
+    ports:
+      - 3306:3306
+    volumes:
+      - visit-service-volume:/var/lib/visit-service-db
+      - ./spring-petclinic-visits-service/src/main/resources/db/mysql/data.sql:/docker-entrypoint-initdb.d/data.sql
+      - ./spring-petclinic-visits-service/src/main/resources/db/mysql/schema.sql:/docker-entrypoint-initdb.d/1-schema.sql
+  db-vets-service:
+    image: mysql:latest
+    restart: on-failure
+    container_name: db-vets-service
+    environment:
+      MYSQL_DATABASE: 'vets_service'
+      MYSQL_USER: 'user'
+      MYSQL_PASSWORD: 'password'
+      MYSQL_ROOT_PASSWORD: 'password'
+    ports:
+      - 3307:3306
+    volumes:
+      - vets-service-volume:/var/lib/vets-service-db
+      - ./spring-petclinic-vets-service/src/main/resources/db/mysql/data.sql:/docker-entrypoint-initdb.d/2-data.sql
+      - ./spring-petclinic-vets-service/src/main/resources/db/mysql/schema.sql:/docker-entrypoint-initdb.d/1-schema.sql
+
+  db-customers-service:
+    image: mysql:latest
+    restart: on-failure
+    container_name: db-customers-service
+    environment:
+      MYSQL_DATABASE: 'customers_service'
+      MYSQL_USER: 'user'
+      MYSQL_PASSWORD: 'password'
+      MYSQL_ROOT_PASSWORD: 'password'
+    ports:
+      - 3308:3306
+    volumes:
+      - customers-service-volume:/var/lib/customers-service-db
+      - ./spring-petclinic-customers-service/src/main/resources/db/mysql/data.sql:/docker-entrypoint-initdb.d/data.sql
+      - ./spring-petclinic-customers-service/src/main/resources/db/mysql/schema.sql:/docker-entrypoint-initdb.d/1-schema.sql
+
+  # logs and metrics
+  fluentd:
+    build: ./fluentd
+    volumes:
+      - ./fluentd/conf:/fluentd/etc
+    links:
+      - "elasticsearch"
+    ports:
+      - "24224:24224"
+      - "24224:24224/udp"
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.6.0
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    environment:
+      - "discovery.type=single-node"
+    expose:
+      - "9200"
+    ports:
+      - "9200:9200"
+
+  kibana:
+    image: kibana:7.6.0
+    links:
+      - "elasticsearch"
+    ports:
+      - "5601:5601"
